@@ -26,7 +26,7 @@ class BattleModel:
 
     def battle(self) -> str:
 
-        """Conducts a battle between two Meal combatants and determines the winner.
+        """Conducts a battle between two Meal combatants and determines a winner.
 
         Returns:
             str: The name of the winning meal.
