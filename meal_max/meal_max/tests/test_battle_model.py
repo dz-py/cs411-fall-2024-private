@@ -12,11 +12,11 @@ def mock_update_meal_stats(mocker):
 
 @pytest.fixture()
 def sample_meal1():
-    return Meal(id=1, meal="Pasta", price=12.5, cuisine="Italian", difficulty="MED")  # Fill with realistic data
+    return Meal(id=1, meal="Pasta", price=12.5, cuisine="Italian", difficulty="MED")  
 
 @pytest.fixture()
 def sample_meal2():
-    return Meal(id=2, meal="Sushi", price=15.0, cuisine="Japanese", difficulty="HIGH")  # Fill with realistic data
+    return Meal(id=2, meal="Sushi", price=15.0, cuisine="Japanese", difficulty="HIGH")  
 
 @pytest.fixture
 def sample_battle(battle_model, sample_meal1, sample_meal2):
