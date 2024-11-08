@@ -310,4 +310,4 @@ def get_leaderboard() -> Response:
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=4999) #change the port back, 5000 is in use
+    app.run(debug=True, host='0.0.0.0', port=5000) 
