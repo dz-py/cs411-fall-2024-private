@@ -25,3 +25,12 @@ class HabitatManager:
 
     def assign_animals_to_habitat(self, habitat_id: int, animals: List[Animal]) -> None:
         pass
+    
+    def get_habitats_by_geographic_area(geographic_area: str) -> List[Habitat]:
+        pass
+
+    def get_habitats_by_size(size: int) -> List[Habitat]:
+        pass
+
+    def get_habitats_by_type(environment_type: str) -> List[Habitat]:
+        pass

@@ -2,6 +2,7 @@ from typing import Optional
 
 from wildlife_tracker.migration_tracking.migration import Migration
 from wildlife_tracker.migration_tracking.migration_path import MigrationPath
+from wildlife_tracker.habitat_management.habitat import Habitat
 
 
 class MigrationManager:
@@ -28,4 +29,22 @@ class MigrationManager:
         pass
 
     def get_migration_path_by_id(self, path_id: int) -> Optional[MigrationPath]:
+        pass
+
+    def get_migrations(self) -> list[Migration]:
+        pass
+
+    def get_migrations_by_current_location(self, current_location: str) -> list[Migration]:
+        pass
+
+    def get_migrations_by_migration_path(self, migration_path_id: int) -> list[Migration]:
+        pass
+
+    def get_migrations_by_start_date(self, start_date: str) -> list[Migration]:
+        pass
+
+    def get_migrations_by_status(self, status: str) -> list[Migration]:
+        pass
+
+    def get_migration_path_details(self, path_id: str) -> dict:
         pass

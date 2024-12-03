@@ -81,4 +81,4 @@ def test_get_random_whitespace_response(mock_get, mock_response):
     mock_get.return_value = mock_response
 
     with pytest.raises(ValueError, match="Invalid response from random.org:"):
-        get_random()
+        get_random(
