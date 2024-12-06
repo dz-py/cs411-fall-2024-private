@@ -56,9 +56,45 @@ def create_account():
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
     
+
 @routes.route('/login', methods=['POST'])
 def login():
-    pass  
+    """
+    Handles user login by verifying username and password.
+
+    Request:
+        JSON object containing:
+            username (str): The username
+            password (str): The password
+
+    Returns:
+        Response:
+            - 200: Successful login
+            - 400: Missing or invalid data in the request
+            - 401: Incorrect username or password
+            - 500: Server error during login
+    """
+    data = request.get_json()
+
+    # Check username and password in request
+    if not data or 'username' not in data or 'password' not in data:
+        return jsonify({'error': 'Username and password are required.'}), 400
+
+    username = data['username']
+    password = data['password']
+
+    # Check if the user exists in the db
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({'error': 'Incorrect username or password.'}), 401
+
+    # Hash password with the stored salt and compare with stored hash
+    if user.password_hash != user.hash_password(password, user.salt):
+        return jsonify({'error': 'Incorrect username or password.'}), 401
+
+    # Successful 
+    return jsonify({'message': 'Login successful.'}), 200  
+
 
 @routes.route('/update-password', methods=['PUT'])
 def update_password():
