@@ -153,30 +153,48 @@ def update_password():
 # Stock Routes (API Model)
 # ---------------------------
 
+# Health Check
 @routes.route('/health', methods=['GET'])
 def health_check():
-    pass
-
-# Stock Price Lookup Route
-@routes.route('/stock/<symbol>/price', methods=['GET'])
-def get_stock_price(symbol):
-    pass
+    if api.health_check():
+        return jsonify({"status": "Alpha Vantage API is healthy"}), 200
+    return jsonify({"status": "Alpha Vantage API is unavailable"}), 503
 
 
-# Stock Information Lookup Route
-@routes.route('/stock/<symbol>/info', methods=['GET'])
-def get_stock_info(symbol):
-    pass
+# View Portfolio
+@routes.route('/portfolio/view', methods=['GET'])
+def view_portfolio():
+    user_id = request.args.get('user_id')
+    user = User.query.get(user_id)  
+    if not user:
+        return jsonify({"error": "User not found"}), 404
 
-# Buy Stock Route
-@routes.route('/buy', methods=['POST'])
+    user_holdings = user.get_holdings()  
+    portfolio_data = api.view_portfolio(user_holdings)
+    return jsonify(portfolio_data), 200
+
+
+# Buy Stock
+@routes.route('/portfolio/buy', methods=['POST'])
 def buy_stock():
     pass
 
 
-# Portfolio Value Calculation Route
+# Sell Stock
+@routes.route('/portfolio/sell', methods=['POST'])
+def sell_stock():
+    pass
+
+
+# Stock Lookup
+@routes.route('/stock/<symbol>/info', methods=['GET'])
+def get_stock_info(symbol):
+    pass
+
+
+# Calculate Portfolio Value
 @routes.route('/portfolio/value', methods=['GET'])
-def get_portfolio_value():
+def calculate_portfolio_value():
     pass
 
 

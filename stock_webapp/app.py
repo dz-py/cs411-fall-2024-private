@@ -1,5 +1,5 @@
 from flask import Flask
-from stock_webapp.extensions import db
+from stock_webapp.extensions import db, migrate
 from stock_webapp.routes import routes
 
 """
@@ -21,6 +21,7 @@ def create_app():
 
     # initialize extensions
     db.init_app(app)
+    migrate.init_app(app, db)
 
     # register blueprints
     app.register_blueprint(routes)

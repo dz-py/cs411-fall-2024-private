@@ -1,3 +1,4 @@
+# stock_webapp/__init__.py
 from flask import Flask
 from stock_webapp.extensions import db
 from stock_webapp.routes import routes
@@ -8,6 +9,6 @@ def create_app():
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     db.init_app(app)
-    routes(app)
+    app.register_blueprint(routes)
 
     return app

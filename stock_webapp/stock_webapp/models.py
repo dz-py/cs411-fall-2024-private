@@ -35,7 +35,7 @@ class User(db.Model):
         self.salt = self.generate_salt()
         self.password_hash = self.hash_password(password, self.salt)
 
-    def generate_salt():
+    def generate_salt(self):
         """
         Generates a random salt.
 
@@ -44,7 +44,7 @@ class User(db.Model):
         """
         return os.urandom(32).hex()
 
-    def hash_password(password, salt):
+    def hash_password(self, password, salt):
         """
         Hashes the password with the provided salt using SHA-256.
 
@@ -57,3 +57,32 @@ class User(db.Model):
         """
         salted_password = f"{salt}{password}"
         return hashlib.sha256(salted_password.encode()).hexdigest()
+    
+    def get_holdings(self):
+        """
+        Method to retrieve all the stock holdings associated with the user.
+        Assuming there is a `Holding` model that stores user stock holdings.
+
+        Returns:
+            list: List of holdings (each holding as a dictionary with `symbol` and `quantity`)
+        """
+        holdings = Holding.query.filter_by(user_id=self.id).all()
+        return [{"symbol": holding.symbol, "quantity": holding.quantity} for holding in holdings]
+    
+
+class Holding(db.Model):
+    """
+    Represents a stock holding for a user
+
+    Attributes:
+        id (int): Primary key for the holding
+        user_id (int): Foreign key for the associated user
+        symbol (str): Stock symbol (e.g., "AAPL")
+        quantity (int): Number of shares held by the user
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    symbol = db.Column(db.String(10), nullable=False)
+    quantity = db.Column(db.Integer, nullable=False)
+
+    user = db.relationship('User', backref=db.backref('holdings', lazy=True))
