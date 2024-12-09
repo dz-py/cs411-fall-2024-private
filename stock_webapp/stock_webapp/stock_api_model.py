@@ -2,9 +2,9 @@ import requests
 import os
 from flask import jsonify, current_app
 from dotenv import load_dotenv
-from stock_webapp.models.user_model import User
+from stock_webapp.stock_webapp.models import User
 
-# Load the variables from .env file
+# Load the variables from the .env file
 load_dotenv()
 
 class AlphaVantageAPI:
@@ -87,7 +87,7 @@ class AlphaVantageAPI:
         return portfolio_summary
     
     
-    def buy_stock():
+    def buy_stock(self, symbol, quantity, user):
         try:
             response = requests.get(
                 self.BASE_URL,
@@ -118,7 +118,7 @@ class AlphaVantageAPI:
             return {"error": str(e)}
     
     
-    def sell_stock():
+    def sell_stock(self, symbol, quantity, user):
         try:
             response = requests.get(
                 self.BASE_URL,
