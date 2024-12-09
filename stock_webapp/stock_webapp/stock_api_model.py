@@ -151,3 +151,67 @@ class AlphaVantageAPI:
             }
         except Exception as e:
             return {"error": str(e)}
+
+    def get_stock_info(self, symbol):
+        current_app.logger.info(f"Fetching stock data for symbol: {symbol}")
+
+        try:
+            response = requests.get(
+                self.BASE_URL,
+                params={
+                    "function": "GLOBAL_QUOTE",
+                    "symbol": symbol,
+                    "apikey": self.API_KEY,
+                },
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                try:
+                    stock_data = {
+                        "symbol": symbol,
+                        "company_name": data["Global Quote"].get("01. symbol", "N/A"),
+                        "current_price": float(data["Global Quote"]["05. price"]),
+                        "previous_close": float(data["Global Quote"]["08. previous close"]),
+                        "high": float(data["Global Quote"]["03. high"]),
+                        "low": float(data["Global Quote"]["04. low"]),
+                        "volume": int(data["Global Quote"]["06. volume"]),
+                    }
+                    current_app.logger.info(f"Stock data for {symbol}: {stock_data}")
+                    return stock_data
+                except (KeyError, ValueError) as e:
+                    current_app.logger.error(f"Error processing stock data for {symbol}: {e}")
+                    return {"error": "Invalid data from API"}
+            else:
+                current_app.logger.error(f"API request failed for {symbol}, status_code: {response.status_code}")
+                return {"error": "API request failed"}
+        except requests.exceptions.RequestException as e:
+            current_app.logger.error(f"Request exception for symbol {symbol}: {e}")
+            return {"error": "Request failed"}
+
+    def calculate_portfolio_value(self, user_holdings):
+        current_app.logger.info(f"Calculating portfolio value for holdings: {user_holdings}")
+        portfolio_summary = {}
+        total_value = 0.0
+
+        for holding in user_holdings:
+            symbol = holding.get("symbol")
+            quantity = holding.get("quantity", 0)
+
+            stock_info = self.get_stock_info(symbol)
+            if "error" not in stock_info:
+                current_price = stock_info["current_price"]
+                stock_value = current_price * quantity
+                total_value += stock_value
+
+                portfolio_summary[symbol] = {
+                    "quantity": quantity,
+                    "current_price": current_price,
+                    "stock_value": stock_value,
+                }
+            else:
+                portfolio_summary[symbol] = {"error": stock_info["error"]}
+
+        portfolio_summary["total_portfolio_value"] = total_value
+        current_app.logger.info(f"Portfolio value: {total_value}")
+        return portfolio_summary
