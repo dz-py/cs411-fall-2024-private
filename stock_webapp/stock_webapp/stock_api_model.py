@@ -2,6 +2,7 @@ import requests
 import os
 from flask import jsonify, current_app
 from dotenv import load_dotenv
+from stock_webapp.models.user_model import User
 
 # Load the variables from .env file
 load_dotenv()
@@ -84,3 +85,69 @@ class AlphaVantageAPI:
         portfolio_summary["total_portfolio_value"] = total_portfolio_value
         current_app.logger.info('Portfolio summary: %s', portfolio_summary)
         return portfolio_summary
+    
+    
+    def buy_stock():
+        try:
+            response = requests.get(
+                self.BASE_URL,
+                params={
+                    "function": "GLOBAL_QUOTE",
+                    "symbol": symbol,
+                    "apikey": self.API_KEY,
+                },
+            )
+
+            if response.status_code != 200:
+                return {"error": "Failed to fetch stock data."}
+
+            data = response.json()
+            current_price = float(data["Global Quote"]["05. price"])
+            total_cost = current_price * quantity
+
+            user.add_stock(symbol, quantity, total_cost)
+
+            return {
+                "message": "Stock purchased successfully.",
+                "symbol": symbol,
+                "quantity": quantity,
+                "price_per_share": current_price,
+                "total_cost": total_cost,
+            }
+        except Exception as e:
+            return {"error": str(e)}
+    
+    
+    def sell_stock():
+        try:
+            response = requests.get(
+                self.BASE_URL,
+                params={
+                    "function": "GLOBAL_QUOTE",
+                    "symbol": symbol,
+                    "apikey": self.API_KEY,
+                },
+            )
+
+            if response.status_code != 200:
+                return {"error": "Failed to fetch stock data."}
+
+            data = response.json()
+            current_price = float(data["Global Quote"]["05. price"])
+
+            if not user.has_stock(symbol, quantity):
+                return {"error": "Insufficient shares to sell."}
+
+            total_proceeds = current_price * quantity
+
+            user.remove_stock(symbol, quantity)
+
+            return {
+                "message": "Stock sold successfully.",
+                "symbol": symbol,
+                "quantity": quantity,
+                "price_per_share": current_price,
+                "total_proceeds": total_proceeds,
+            }
+        except Exception as e:
+            return {"error": str(e)}

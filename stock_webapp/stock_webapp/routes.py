@@ -177,13 +177,47 @@ def view_portfolio():
 # Buy Stock
 @routes.route('/portfolio/buy', methods=['POST'])
 def buy_stock():
-    pass
+    data = request.get_json()
+    if not data or not all(k in data for k in ("user_id", "symbol", "quantity")):
+        return jsonify({'error': 'user_id, symbol, and quantity are required.'}), 400  
+    
+    user_id = data['user_id']
+    symbol = data['symbol'].upper()
+    quantity = data['quantity']
+    
+    if quantity <= 0:
+        return jsonify({'error': 'Quantity must be positive.'}), 400
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found.'}), 404
+    
+    transaction_result = api.buy_stock(user, symbol, quantity)
+    if "error" in transaction_result:
+        return jsonify(transaction_result), 500
+    return jsonify(transaction_result), 200
 
 
 # Sell Stock
 @routes.route('/portfolio/sell', methods=['POST'])
 def sell_stock():
-    pass
+    data = request.get_json()
+    if not data or not all(k in data for k in ("user_id", "symbol", "quantity")):
+        return jsonify({'error': 'user_id, symbol, and quantity are required.'}), 400
+        
+    user_id = data['user_id']
+    symbol = data['symbol'].upper()
+    quantity = data['quantity']
+        
+    if quantity <= 0:
+        return jsonify({'error': 'Quantity must be positive.'}), 400
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found.'}), 404
+        
+    transaction_result = api.sell_stock(user, symbol, quantity)
+    if "error" in transaction_result:
+        return jsonify(transaction_result), 500
+    return jsonify(transaction_result), 200
 
 
 # Stock Lookup
