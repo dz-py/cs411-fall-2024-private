@@ -68,6 +68,43 @@ class User(db.Model):
         """
         holdings = Holding.query.filter_by(user_id=self.id).all()
         return [{"symbol": holding.symbol, "quantity": holding.quantity} for holding in holdings]
+
+
+    def has_stock(self, symbol, quantity):
+        """
+        Check if the user has enough shares of a specific stock.
+        """
+        stock = self.get_stock(symbol)
+        if stock and stock['quantity'] >= quantity:
+            return True
+        return False
+    
+    def remove_stock(self, symbol, quantity):
+        """
+        Remove a specific quantity of stock from the user's portfolio.
+        """
+        stock = self.get_stock(symbol)
+        if stock and stock['quantity'] >= quantity:
+            stock['quantity'] -= quantity
+            self.save_stock(stock)
+            
+    def add_stock(self, symbol, quantity, total_cost):
+        """
+        Add a specific quantity of stock to the user's portfolio.
+        """
+        stock = self.get_stock(symbol)
+        if stock:
+            stock['quantity'] += quantity
+        else:
+            stock = {"symbol": symbol, "quantity": quantity, "total_cost": total_cost}
+        self.save_stock(stock)
+        
+    def save_stock(self, stock):
+        """
+        Save or update stock in the user's portfolio (persist to DB).
+        """
+        db.session.add(stock)
+        db.session.commit()
     
 
 class Holding(db.Model):
