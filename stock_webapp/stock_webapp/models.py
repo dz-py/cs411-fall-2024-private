@@ -103,8 +103,19 @@ class User(db.Model):
         """
         Save or update stock in the user's portfolio (persist to DB).
         """
-        db.session.add(stock)
-        db.session.commit()
+        stock = Holding.query.filter_by(user_id=self.id, symbol=symbol).first()
+        if stock:
+            return {"symbol": stock.symbol, "quantity": stock.quantity}
+        return None
+    
+    def get_stock(self, symbol):
+        """
+        Retrieve a specific stock's holding from the user's portfolio.
+        """
+        stock = Holding.query.filter_by(user_id=self.id, symbol=symbol).first()
+        if stock:
+            return {"symbol": stock.symbol, "quantity": stock.quantity}
+        return None
     
 
 class Holding(db.Model):
