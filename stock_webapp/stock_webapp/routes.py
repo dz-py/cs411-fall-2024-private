@@ -189,14 +189,21 @@ def sell_stock():
 # Stock Lookup
 @routes.route('/stock/<symbol>/info', methods=['GET'])
 def get_stock_info(symbol):
-    pass
+    stock_info = api.get_stock_info(symbol)
+    return jsonify(stock_info), 200 if "error" not in stock_info else 400
 
 
 # Calculate Portfolio Value
 @routes.route('/portfolio/value', methods=['GET'])
 def calculate_portfolio_value():
-    pass
+    user_id = request.args.get('user_id')
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
 
+    user_holdings = user.get_holdings()  # Make sure this function returns the correct data
+    portfolio_data = api.calculate_portfolio_value(user_holdings)
+    return jsonify(portfolio_data), 200
 
 if __name__ == "__main__":
     routes.run(debug=True)
