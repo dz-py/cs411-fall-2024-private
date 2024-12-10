@@ -17,11 +17,13 @@ class User(db.Model):
         username (str): The user's unique username
         salt (str): The unique salt for the user
         password_hash (str): The hashed password of the user
+        balance (float): The user's available cash balance for stock transactions
     """
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
-    salt = db.Column(db.String(64), nullable=False)  # Salt stored as a hex string
+    salt = db.Column(db.String(64), nullable=False)  
     password_hash = db.Column(db.String(120), nullable=False)
+    balance = db.Column(db.Float, default=1000000000000000.0)  
 
     def __init__(self, username, password):
         """
@@ -127,10 +129,13 @@ class Holding(db.Model):
         user_id (int): Foreign key for the associated user
         symbol (str): Stock symbol (e.g., "AAPL")
         quantity (int): Number of shares held by the user
+        price_per_share (float): The price at which each share was purchased
     """
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     symbol = db.Column(db.String(10), nullable=False)
     quantity = db.Column(db.Integer, nullable=False)
+    price_per_share = db.Column(db.Float, nullable=False)  
+    total_cost = db.Column(db.Float, nullable=False)
 
     user = db.relationship('User', backref=db.backref('holdings', lazy=True))

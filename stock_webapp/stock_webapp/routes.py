@@ -2,6 +2,8 @@ from flask import Blueprint, request, jsonify
 from stock_webapp.models import User
 from stock_webapp.extensions import db
 from stock_webapp.stock_api_model import AlphaVantageAPI
+from stock_webapp.models import Holding
+
 
 """
 This file contains all route definitions for the Flask app.
@@ -174,27 +176,66 @@ def view_portfolio():
     return jsonify(portfolio_data), 200
 
 
-# Buy Stock
 @routes.route('/portfolio/buy', methods=['POST'])
 def buy_stock():
     data = request.get_json()
-    if not data or not all(k in data for k in ("user_id", "symbol", "quantity")):
-        return jsonify({'error': 'user_id, symbol, and quantity are required.'}), 400  
+    
+    # Debugging: print the raw request data to ensure it's received correctly
+    print(f"Received data: {data}")
+    
+    if not data or not all(k in data for k in ("user_id", "symbol", "quantity", "price_per_share")):
+        return jsonify({'error': 'user_id, symbol, quantity, and price_per_share are required.'}), 400  
     
     user_id = data['user_id']
     symbol = data['symbol'].upper()
     quantity = data['quantity']
+    price_per_share = data['price_per_share']
+    
+    # Debugging: print the values of the fields
+    print(f"Received request to buy {quantity} of {symbol} at {price_per_share} per share for user {user_id}")
     
     if quantity <= 0:
         return jsonify({'error': 'Quantity must be positive.'}), 400
+
+    # Fetch the user
     user = User.query.get(user_id)
     if not user:
         return jsonify({'error': 'User not found.'}), 404
     
-    transaction_result = api.buy_stock(user, symbol, quantity)
-    if "error" in transaction_result:
-        return jsonify(transaction_result), 500
-    return jsonify(transaction_result), 200
+    # Calculate total cost of the purchase
+    total_cost = price_per_share * quantity
+    
+    # Debugging: print the total cost calculation
+    print(f"Total cost for {quantity} shares of {symbol}: {total_cost} (price per share: {price_per_share}, quantity: {quantity})")
+    
+    # Check if user has enough balance
+    if user.balance < total_cost:
+        return jsonify({'error': 'Insufficient balance.'}), 400
+    
+    # Deduct balance from the user
+    user.balance -= total_cost
+    db.session.commit()
+
+    # Check if the user already has holdings of the stock
+    holding = Holding.query.filter_by(user_id=user_id, symbol=symbol).first()
+    if holding:
+        # Update existing holding with new quantity
+        holding.quantity += quantity
+    else:
+        # Create a new holding for the user
+        holding = Holding(
+            user_id=user_id,
+            symbol=symbol,
+            quantity=quantity,
+            price_per_share=price_per_share,
+            total_cost=total_cost
+        )
+        db.session.add(holding)
+
+    db.session.commit()
+
+    # Return a success response
+    return jsonify({'message': 'Stock purchased successfully', 'total_cost': total_cost, 'balance': user.balance}), 200
 
 
 # Sell Stock
@@ -238,6 +279,34 @@ def calculate_portfolio_value():
     user_holdings = user.get_holdings()  # Make sure this function returns the correct data
     portfolio_data = api.calculate_portfolio_value(user_holdings)
     return jsonify(portfolio_data), 200
+
+
+
+@routes.route('/update-balance', methods=['PUT'])
+def update_balance():
+    try:
+        # Get data from the request
+        data = request.get_json()
+        user_id = data.get("user_id")
+        balance = data.get("balance")
+        
+        # Validate input
+        if user_id is None or balance is None:
+            return jsonify({"error": "Invalid input"}), 400
+
+        # Fetch the user from the database
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Update the balance
+        user.balance = balance
+        db.session.commit()
+
+        return jsonify({"message": "Balance updated successfully."})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     routes.run(debug=True)

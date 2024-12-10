@@ -2,7 +2,9 @@ import requests
 import os
 from flask import jsonify, current_app
 from dotenv import load_dotenv
-from stock_webapp.stock_webapp.models import User
+from stock_webapp.models import User
+from stock_webapp.extensions import db  
+from stock_webapp.models import Holding
 
 # Load the variables from the .env file
 load_dotenv()
@@ -89,6 +91,7 @@ class AlphaVantageAPI:
     
     def buy_stock(self, symbol, quantity, user):
         try:
+            # Fetch the current stock price
             response = requests.get(
                 self.BASE_URL,
                 params={
@@ -101,11 +104,54 @@ class AlphaVantageAPI:
             if response.status_code != 200:
                 return {"error": "Failed to fetch stock data."}
 
-            data = response.json()
-            current_price = float(data["Global Quote"]["05. price"])
-            total_cost = current_price * quantity
+            # Log the response to check its structure
+            current_app.logger.info(f"API Response: {response.json()}")
 
-            user.add_stock(symbol, quantity, total_cost)
+            # Extract the price from the response
+            data = response.json()
+            
+            # Safely get the 'Global Quote' key
+            if 'Global Quote' not in data:
+                return {"error": "Failed to find 'Global Quote' in the API response."}
+            
+            current_price = float(data["Global Quote"]["05. price"])
+
+            # Check if the user has a valid balance
+            if user.balance is None:
+                user.balance = 0.0  # Set default balance if None
+
+            # Calculate total cost of the stock purchase
+            total_cost = current_price * quantity
+            current_app.logger.info(f"Stock Price: {current_price}, Quantity: {quantity}, Total Cost: {total_cost}")
+
+            # Check if the user can afford the stock purchase
+            if user.balance < total_cost:
+                current_app.logger.info(f"User balance: {user.balance}, Total cost: {total_cost}")
+                return {"error": "Insufficient funds to buy the stock."}
+
+            # Retrieve the user's existing stock holdings for this symbol
+            holding = Holding.query.filter_by(user_id=user.id, symbol=symbol).first()
+
+            if holding:
+                # If stock already exists in the portfolio, update the quantity and total cost
+                holding.quantity += quantity
+                holding.total_cost += total_cost
+            else:
+                # If stock doesn't exist, create a new holding
+                holding = Holding(
+                    user_id=user.id,
+                    symbol=symbol,
+                    quantity=quantity,
+                    price_per_share=current_price,
+                    total_cost=total_cost,
+                )
+                db.session.add(holding)
+
+            # Deduct the total cost from the user's balance
+            user.balance -= total_cost
+
+            # Commit the changes to the database
+            db.session.commit()
 
             return {
                 "message": "Stock purchased successfully.",
@@ -114,10 +160,12 @@ class AlphaVantageAPI:
                 "price_per_share": current_price,
                 "total_cost": total_cost,
             }
+
         except Exception as e:
+            current_app.logger.error(f"Error occurred while buying stock: {str(e)}")
             return {"error": str(e)}
-    
-    
+
+
     def sell_stock(self, symbol, quantity, user):
         try:
             response = requests.get(
@@ -135,12 +183,25 @@ class AlphaVantageAPI:
             data = response.json()
             current_price = float(data["Global Quote"]["05. price"])
 
-            if not user.has_stock(symbol, quantity):
+            # Check if the user has enough stock to sell
+            holding = Holding.query.filter_by(user_id=user.id, symbol=symbol).first()
+
+            if not holding or holding.quantity < quantity:
                 return {"error": "Insufficient shares to sell."}
 
             total_proceeds = current_price * quantity
 
-            user.remove_stock(symbol, quantity)
+            # Update the holding after selling
+            holding.quantity -= quantity
+            # If quantity reaches zero, delete the holding
+            if holding.quantity == 0:
+                db.session.delete(holding)
+
+            # Add the proceeds from the sale to the user's balance
+            user.balance += total_proceeds
+
+            # Commit the changes to the database
+            db.session.commit()
 
             return {
                 "message": "Stock sold successfully.",
@@ -167,27 +228,29 @@ class AlphaVantageAPI:
 
             if response.status_code == 200:
                 data = response.json()
-                try:
-                    stock_data = {
-                        "symbol": symbol,
-                        "company_name": data["Global Quote"].get("01. symbol", "N/A"),
-                        "current_price": float(data["Global Quote"]["05. price"]),
-                        "previous_close": float(data["Global Quote"]["08. previous close"]),
-                        "high": float(data["Global Quote"]["03. high"]),
-                        "low": float(data["Global Quote"]["04. low"]),
-                        "volume": int(data["Global Quote"]["06. volume"]),
-                    }
-                    current_app.logger.info(f"Stock data for {symbol}: {stock_data}")
-                    return stock_data
-                except (KeyError, ValueError) as e:
-                    current_app.logger.error(f"Error processing stock data for {symbol}: {e}")
-                    return {"error": "Invalid data from API"}
+
+                # Check if 'Global Quote' and '05. price' exist
+                if "Global Quote" not in data or "05. price" not in data["Global Quote"]:
+                    current_app.logger.error(f"'05. price' field is missing for symbol {symbol}.")
+                    return {"error": "'05. price' field not found in the API response"}
+
+                stock_data = {
+                    "symbol": symbol,
+                    "company_name": data["Global Quote"].get("01. symbol", "N/A"),
+                    "current_price": float(data["Global Quote"]["05. price"]),
+                    "previous_close": float(data["Global Quote"]["08. previous close"]),
+                    "high": float(data["Global Quote"]["03. high"]),
+                    "low": float(data["Global Quote"]["04. low"]),
+                    "volume": int(data["Global Quote"]["06. volume"]),
+                }
+                current_app.logger.info(f"Stock data for {symbol}: {stock_data}")
+                return stock_data
             else:
                 current_app.logger.error(f"API request failed for {symbol}, status_code: {response.status_code}")
-                return {"error": "API request failed"}
+                return {"error": f"API request failed for {symbol}"}
         except requests.exceptions.RequestException as e:
             current_app.logger.error(f"Request exception for symbol {symbol}: {e}")
-            return {"error": "Request failed"}
+            return {"error": f"Request failed for {symbol}: {str(e)}"}
 
     def calculate_portfolio_value(self, user_holdings):
         current_app.logger.info(f"Calculating portfolio value for holdings: {user_holdings}")
