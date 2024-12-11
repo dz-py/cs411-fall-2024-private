@@ -1,0 +1,312 @@
+from flask import Blueprint, request, jsonify
+from stock_webapp.models import User
+from stock_webapp.extensions import db
+from stock_webapp.stock_api_model import AlphaVantageAPI
+from stock_webapp.models import Holding
+
+
+"""
+This file contains all route definitions for the Flask app.
+Routes define the endpoints and the logic to handle incoming HTTP requests.
+"""
+
+routes = Blueprint('routes', __name__)
+
+# initialize API model
+api = AlphaVantageAPI()
+
+# ---------------------------
+# Account Routes
+# ---------------------------
+
+@routes.route('/create-account', methods=['POST'])
+def create_account():
+    """
+    Handles the creation of a new user account.
+
+    Request:
+        JSON object containing:
+            username (str): The username
+            password (str): The password
+
+    Returns:
+        Response:
+            - 201: Account successfully created
+            - 400: Missing or invalid data in the request
+            - 409: Username already exists
+            - 500: Server error during account creation
+    """
+    data = request.get_json()
+
+    if not data or 'username' not in data or 'password' not in data:
+        return jsonify({'error': 'Username and password are required.'}), 400
+
+    username = data['username']
+    password = data['password']
+
+    # cehck if the username already exists
+    if User.query.filter_by(username=username).first():
+        return jsonify({'error': 'Username already exists.'}), 409
+
+    # create the user and save to the database
+    try:
+        new_user = User(username=username, password=password)
+        db.session.add(new_user)
+        db.session.commit()
+        return jsonify({'message': 'Account created successfully.'}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+    
+
+@routes.route('/login', methods=['POST'])
+def login():
+    """
+    Handles user login by verifying username and password.
+
+    Request:
+        JSON object containing:
+            username (str): The username
+            password (str): The password
+
+    Returns:
+        Response:
+            - 200: Successful login
+            - 400: Missing or invalid data in the request
+            - 401: Incorrect username or password
+            - 500: Server error during login
+    """
+    data = request.get_json()
+
+    # Check username and password in request
+    if not data or 'username' not in data or 'password' not in data:
+        return jsonify({'error': 'Username and password are required.'}), 400
+
+    username = data['username']
+    password = data['password']
+
+    # Check if the user exists in the db
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({'error': 'Incorrect username or password.'}), 401
+
+    # Hash password with the stored salt and compare with stored hash
+    if user.password_hash != user.hash_password(password, user.salt):
+        return jsonify({'error': 'Incorrect username or password.'}), 401
+
+    # Successful 
+    return jsonify({'message': 'Login successful.'}), 200  
+
+
+@routes.route('/update-password', methods=['PUT'])
+def update_password():
+    """
+    Handles the update of an existing user's password.
+
+    Request:
+        JSON object containing:
+            username (str): The username of the user
+            old_password (str): The current password
+            new_password (str): The new password
+
+    Returns:
+        Response:
+            - 200: Password successfully updated
+            - 400: Missing or invalid data in the request
+            - 401: Unauthorized (incorrect old password)
+            - 404: User not found
+            - 500: Server error during password update
+    """
+    data = request.get_json()
+
+    # Ensure all required fields are in the request
+    if not data or 'username' not in data or 'old_password' not in data or 'new_password' not in data:
+        return jsonify({'error': 'Username, old password, and new password are required.'}), 400
+
+    username = data['username']
+    old_password = data['old_password']
+    new_password = data['new_password']
+
+    # Check if the user exists in the database
+    user = User.query.filter_by(username=username).first()
+    if not user:
+        return jsonify({'error': 'User not found.'}), 404
+
+    # Hash the old password with the user's salt and compare
+    if user.password_hash != user.hash_password(old_password, user.salt):
+        return jsonify({'error': 'Incorrect old password.'}), 401
+
+    # Generate a new salt and hash the new password
+    try:
+        new_salt = user.generate_salt()
+        new_password_hash = user.hash_password(new_password, new_salt)
+
+        # Update the user's password and salt
+        user.salt = new_salt
+        user.password_hash = new_password_hash
+        db.session.commit()
+
+        return jsonify({'message': 'Password updated successfully.'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+# ---------------------------
+# Stock Routes (API Model)
+# ---------------------------
+
+# Health Check
+@routes.route('/health', methods=['GET'])
+def health_check():
+    if api.health_check():
+        return jsonify({"status": "Alpha Vantage API is healthy"}), 200
+    return jsonify({"status": "Alpha Vantage API is unavailable"}), 503
+
+
+# View Portfolio
+@routes.route('/portfolio/view', methods=['GET'])
+def view_portfolio():
+    user_id = request.args.get('user_id')
+    user = User.query.get(user_id)  
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    user_holdings = user.get_holdings()  
+    portfolio_data = api.view_portfolio(user_holdings)
+    return jsonify(portfolio_data), 200
+
+
+@routes.route('/portfolio/buy', methods=['POST'])
+def buy_stock():
+    data = request.get_json()
+    
+    # Debugging: print the raw request data to ensure it's received correctly
+    print(f"Received data: {data}")
+    
+    if not data or not all(k in data for k in ("user_id", "symbol", "quantity", "price_per_share")):
+        return jsonify({'error': 'user_id, symbol, quantity, and price_per_share are required.'}), 400  
+    
+    user_id = data['user_id']
+    symbol = data['symbol'].upper()
+    quantity = data['quantity']
+    price_per_share = data['price_per_share']
+    
+    # Debugging: print the values of the fields
+    print(f"Received request to buy {quantity} of {symbol} at {price_per_share} per share for user {user_id}")
+    
+    if quantity <= 0:
+        return jsonify({'error': 'Quantity must be positive.'}), 400
+
+    # Fetch the user
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found.'}), 404
+    
+    # Calculate total cost of the purchase
+    total_cost = price_per_share * quantity
+    
+    # Debugging: print the total cost calculation
+    print(f"Total cost for {quantity} shares of {symbol}: {total_cost} (price per share: {price_per_share}, quantity: {quantity})")
+    
+    # Check if user has enough balance
+    if user.balance < total_cost:
+        return jsonify({'error': 'Insufficient balance.'}), 400
+    
+    # Deduct balance from the user
+    user.balance -= total_cost
+    db.session.commit()
+
+    # Check if the user already has holdings of the stock
+    holding = Holding.query.filter_by(user_id=user_id, symbol=symbol).first()
+    if holding:
+        # Update existing holding with new quantity
+        holding.quantity += quantity
+    else:
+        # Create a new holding for the user
+        holding = Holding(
+            user_id=user_id,
+            symbol=symbol,
+            quantity=quantity,
+            price_per_share=price_per_share,
+            total_cost=total_cost
+        )
+        db.session.add(holding)
+
+    db.session.commit()
+
+    # Return a success response
+    return jsonify({'message': 'Stock purchased successfully', 'total_cost': total_cost, 'balance': user.balance}), 200
+
+
+# Sell Stock
+@routes.route('/portfolio/sell', methods=['POST'])
+def sell_stock():
+    data = request.get_json()
+    if not data or not all(k in data for k in ("user_id", "symbol", "quantity")):
+        return jsonify({'error': 'user_id, symbol, and quantity are required.'}), 400
+        
+    user_id = data['user_id']
+    symbol = data['symbol'].upper()
+    quantity = data['quantity']
+        
+    if quantity <= 0:
+        return jsonify({'error': 'Quantity must be positive.'}), 400
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found.'}), 404
+        
+    transaction_result = api.sell_stock(user, symbol, quantity)
+    if "error" in transaction_result:
+        return jsonify(transaction_result), 500
+    return jsonify(transaction_result), 200
+
+
+# Stock Lookup
+@routes.route('/stock/<symbol>/info', methods=['GET'])
+def get_stock_info(symbol):
+    stock_info = api.get_stock_info(symbol)
+    return jsonify(stock_info), 200 if "error" not in stock_info else 400
+
+
+# Calculate Portfolio Value
+@routes.route('/portfolio/value', methods=['GET'])
+def calculate_portfolio_value():
+    user_id = request.args.get('user_id')
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    user_holdings = user.get_holdings()  # Make sure this function returns the correct data
+    portfolio_data = api.calculate_portfolio_value(user_holdings)
+    return jsonify(portfolio_data), 200
+
+
+
+@routes.route('/update-balance', methods=['PUT'])
+def update_balance():
+    try:
+        # Get data from the request
+        data = request.get_json()
+        user_id = data.get("user_id")
+        balance = data.get("balance")
+        
+        # Validate input
+        if user_id is None or balance is None:
+            return jsonify({"error": "Invalid input"}), 400
+
+        # Fetch the user from the database
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Update the balance
+        user.balance = balance
+        db.session.commit()
+
+        return jsonify({"message": "Balance updated successfully."})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == "__main__":
+    routes.run(debug=True)
